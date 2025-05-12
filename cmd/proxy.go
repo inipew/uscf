@@ -464,17 +464,17 @@ func createSocksServer(username, password string, dialFunc func(ctx context.Cont
 			socks5.WithResolver(resolver),
 		)
 	} else {
-		cred := socks5.StaticCredentials{
-			username: password,
-		}
-		authenticator := socks5.UserPassAuthenticator{
-			Credentials: cred,
-		}
+
 		return socks5.NewServer(
 			socks5.WithLogger(socks5.NewLogger(log.New(os.Stdout, "socks5: ", log.LstdFlags))),
 			socks5.WithDial(dialFunc),
 			socks5.WithResolver(resolver),
-			socks5.WithAuthMethods([]socks5.Authenticator{authenticator}),
+			socks5.WithAuthMethods([]socks5.Authenticator{
+				socks5.UserPassAuthenticator{
+					Credentials: socks5.StaticCredentials{
+						username: password,
+					},
+				}}),
 		)
 	}
 }
