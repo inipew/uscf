@@ -18,26 +18,63 @@ import (
 
 const packetBuffCap = 2048
 
-var (
-	packetBufferPool = sync.Pool{
-		New: func() interface{} {
-			b := make([]byte, packetBuffCap)
-			return &b
+var packetBufferPool *NetBuffer
+
+// NetBuffer is a pool of byte slices with a fixed capacity.
+// Helps to reduce memory allocations and improve performance.
+// It uses a sync.Pool to manage the byte slices.
+// The capacity of the byte slices is set when the pool is created.
+type NetBuffer struct {
+	capacity int
+	buf      sync.Pool
+}
+
+// Get returns a byte slice from the pool.
+func (n *NetBuffer) GetBuf() *[]byte {
+	return n.buf.Get().(*[]byte)
+}
+
+// Put places a byte slice back into the pool.
+// It checks if the capacity of the byte slice matches the pool's capacity.
+// If it doesn't match, the byte slice is not returned to the pool.
+func (n *NetBuffer) PutBuf(buf *[]byte) {
+	if cap(*buf) != n.capacity {
+		return
+	}
+	n.buf.Put(buf)
+}
+
+// Get returns a byte slice from the pool.
+func (n *NetBuffer) Get() []byte {
+	return *(n.buf.Get().(*[]byte))
+}
+
+// Put places a byte slice back into the pool.
+// It checks if the capacity of the byte slice matches the pool's capacity.
+// If it doesn't match, the byte slice is not returned to the pool.
+func (n *NetBuffer) Put(buf []byte) {
+	if cap(buf) != n.capacity {
+		return
+	}
+	n.buf.Put(&buf)
+}
+
+// NewNetBuffer creates a new NetBuffer with the specified capacity.
+// The capacity must be greater than 0.
+func NewNetBuffer(capacity int) *NetBuffer {
+	if capacity <= 0 {
+		panic("capacity must be greater than 0")
+	}
+	return &NetBuffer{
+		capacity: capacity,
+		buf: sync.Pool{
+			New: func() interface{} {
+				b := make([]byte, capacity)
+				return &b
+			},
 		},
 	}
-	packetBufsPool = sync.Pool{
-		New: func() interface{} {
-			b := make([][]byte, 1)
-			return &b
-		},
-	}
-	sizesPool = sync.Pool{
-		New: func() interface{} {
-			b := make([]int, 1)
-			return &b
-		},
-	}
-)
+}
 
 // TunnelDevice abstracts a TUN device so that we can use the same tunnel-maintenance code
 // regardless of the underlying implementation.
@@ -83,22 +120,24 @@ func (s *TunnelStats) RecordHandShake() {
 
 // NetstackAdapter wraps a tun.Device (e.g. from netstack) to satisfy TunnelDevice.
 type NetstackAdapter struct {
-	dev tun.Device
+	dev            tun.Device
+	packetBufsPool sync.Pool
+	sizesPool      sync.Pool
 }
 
 func (n *NetstackAdapter) ReadPacket(buf []byte) (int, error) {
 
-	//packetBuf := packetBufferPool.Get().([]byte)
+	//packetBuf := packetBufferPool.GetBuf(buf).([]byte)
 
 	// 修改这一行
-	packetBufs := packetBufsPool.Get().(*[][]byte)
-	sizes := sizesPool.Get().(*[]int)
+	packetBufs := n.packetBufsPool.Get().(*[][]byte)
+	sizes := n.sizesPool.Get().(*[]int)
 
 	// 确保在函数结束时将切片归还到对象池
 	defer func() {
 		(*packetBufs)[0] = nil // 避免内存泄漏
-		packetBufsPool.Put(packetBufs)
-		sizesPool.Put(sizes)
+		n.packetBufsPool.Put(packetBufs)
+		n.sizesPool.Put(sizes)
 	}()
 
 	(*packetBufs)[0] = buf
@@ -120,7 +159,20 @@ func (n *NetstackAdapter) WritePacket(pkt []byte) error {
 
 // NewNetstackAdapter creates a new NetstackAdapter.
 func NewNetstackAdapter(dev tun.Device) TunnelDevice {
-	return &NetstackAdapter{dev: dev}
+	return &NetstackAdapter{dev: dev,
+		packetBufsPool: sync.Pool{
+			New: func() interface{} {
+				b := make([][]byte, 1)
+				return &b
+			},
+		},
+		sizesPool: sync.Pool{
+			New: func() interface{} {
+				b := make([]int, 1)
+				return &b
+			},
+		},
+	}
 }
 
 // ConnectionConfig 包含连接配置选项
@@ -190,11 +242,11 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 			case <-ctx.Done():
 				return
 			default:
-				buf := packetBufferPool.Get().(*[]byte)
+				buf := packetBufferPool.GetBuf()
 
 				n, err := device.ReadPacket(*buf)
 				if err != nil {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 					errChan <- fmt.Errorf("failed to read from TUN device: %v", err)
 					return
 				}
@@ -202,12 +254,12 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 				stats.RecordPacketOut(n)
 				icmp, err := ipConn.WritePacket((*buf)[:n])
 				if err != nil {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 					errChan <- fmt.Errorf("failed to write to IP connection: %v", err)
 					return
 				}
 				if cap(*buf) < 2*packetBuffCap {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 				}
 
 				if len(icmp) > 0 {
@@ -229,23 +281,23 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 			case <-ctx.Done():
 				return
 			default:
-				buf := packetBufferPool.Get().(*[]byte)
+				buf := packetBufferPool.GetBuf()
 
 				n, err := ipConn.ReadPacket(*buf, true)
 				if err != nil {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 					errChan <- fmt.Errorf("failed to read from IP connection: %v", err)
 					return
 				}
 
 				stats.RecordPacketIn(n)
 				if err := device.WritePacket((*buf)[:n]); err != nil {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 					errChan <- fmt.Errorf("failed to write to TUN device: %v", err)
 					return
 				}
 				if cap(*buf) < 2*packetBuffCap {
-					packetBufferPool.Put(buf)
+					packetBufferPool.PutBuf(buf)
 				}
 			}
 		}
@@ -332,6 +384,7 @@ func handleConnection(ctx context.Context, config ConnectionConfig, device Tunne
 func MaintainTunnel(ctx context.Context, config ConnectionConfig, device TunnelDevice) {
 	stats := &TunnelStats{}
 	reconnectAttempt := 0
+	packetBufferPool = NewNetBuffer(packetBuffCap)
 
 	for {
 		select {

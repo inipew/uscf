@@ -457,11 +457,18 @@ func runSocksServer(cmd *cobra.Command, tunNet *netstack.Net, connectionTimeout,
 
 // createSocksServer 创建SOCKS5服务器
 func createSocksServer(username, password string, dialFunc func(ctx context.Context, network, addr string) (net.Conn, error), resolver socks5.NameResolver) *socks5.Server {
+	buf := api.NewNetBuffer(32 * 1024) // 32KB buffer
+	if buf == nil {
+		log.Println("Failed to create buffer")
+		return nil
+	}
+
 	if username == "" || password == "" {
 		return socks5.NewServer(
 			socks5.WithLogger(socks5.NewLogger(log.New(os.Stdout, "socks5: ", log.LstdFlags))),
 			socks5.WithDial(dialFunc),
 			socks5.WithResolver(resolver),
+			socks5.WithBufferPool(buf),
 		)
 	} else {
 
@@ -475,6 +482,7 @@ func createSocksServer(username, password string, dialFunc func(ctx context.Cont
 						username: password,
 					},
 				}}),
+			socks5.WithBufferPool(buf),
 		)
 	}
 }
