@@ -21,18 +21,20 @@ const packetBuffCap = 2048
 var (
 	packetBufferPool = sync.Pool{
 		New: func() interface{} {
-			// 默认分配MTU大小的缓冲区，实际使用时会根据需要调整
-			return make([]byte, packetBuffCap)
+			b := make([]byte, packetBuffCap)
+			return &b
 		},
 	}
 	packetBufsPool = sync.Pool{
 		New: func() interface{} {
-			return make([][]byte, 1)
+			b := make([][]byte, 1)
+			return &b
 		},
 	}
 	sizesPool = sync.Pool{
 		New: func() interface{} {
-			return make([]int, 1)
+			b := make([]int, 1)
+			return &b
 		},
 	}
 )
@@ -88,25 +90,26 @@ func (n *NetstackAdapter) ReadPacket(buf []byte) (int, error) {
 
 	//packetBuf := packetBufferPool.Get().([]byte)
 
-	packetBufs := packetBufsPool.Get().([][]byte)
-	sizes := sizesPool.Get().([]int)
+	// 修改这一行
+	packetBufs := packetBufsPool.Get().(*[][]byte)
+	sizes := sizesPool.Get().(*[]int)
 
 	// 确保在函数结束时将切片归还到对象池
 	defer func() {
-		packetBufs[0] = nil // 避免内存泄漏
+		(*packetBufs)[0] = nil // 避免内存泄漏
 		packetBufsPool.Put(packetBufs)
 		sizesPool.Put(sizes)
 	}()
 
-	packetBufs[0] = buf
-	sizes[0] = 0
+	(*packetBufs)[0] = buf
+	(*sizes)[0] = 0
 
-	_, err := n.dev.Read(packetBufs, sizes, 0)
+	_, err := n.dev.Read(*packetBufs, *sizes, 0)
 	if err != nil {
 		return 0, err
 	}
 
-	return sizes[0], nil
+	return (*sizes)[0], nil
 }
 
 func (n *NetstackAdapter) WritePacket(pkt []byte) error {
@@ -187,9 +190,9 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 			case <-ctx.Done():
 				return
 			default:
-				buf := packetBufferPool.Get().([]byte)
+				buf := packetBufferPool.Get().(*[]byte)
 
-				n, err := device.ReadPacket(buf)
+				n, err := device.ReadPacket(*buf)
 				if err != nil {
 					packetBufferPool.Put(buf)
 					errChan <- fmt.Errorf("failed to read from TUN device: %v", err)
@@ -197,13 +200,13 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 				}
 
 				stats.RecordPacketOut(n)
-				icmp, err := ipConn.WritePacket(buf[:n])
+				icmp, err := ipConn.WritePacket((*buf)[:n])
 				if err != nil {
 					packetBufferPool.Put(buf)
 					errChan <- fmt.Errorf("failed to write to IP connection: %v", err)
 					return
 				}
-				if cap(buf) < 2*packetBuffCap {
+				if cap(*buf) < 2*packetBuffCap {
 					packetBufferPool.Put(buf)
 				}
 
@@ -226,9 +229,9 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 			case <-ctx.Done():
 				return
 			default:
-				buf := packetBufferPool.Get().([]byte)
+				buf := packetBufferPool.Get().(*[]byte)
 
-				n, err := ipConn.ReadPacket(buf, true)
+				n, err := ipConn.ReadPacket(*buf, true)
 				if err != nil {
 					packetBufferPool.Put(buf)
 					errChan <- fmt.Errorf("failed to read from IP connection: %v", err)
@@ -236,12 +239,12 @@ func handleForwarding(ctx context.Context, device TunnelDevice, ipConn *connecti
 				}
 
 				stats.RecordPacketIn(n)
-				if err := device.WritePacket(buf[:n]); err != nil {
+				if err := device.WritePacket((*buf)[:n]); err != nil {
 					packetBufferPool.Put(buf)
 					errChan <- fmt.Errorf("failed to write to TUN device: %v", err)
 					return
 				}
-				if cap(buf) < 2*packetBuffCap {
+				if cap(*buf) < 2*packetBuffCap {
 					packetBufferPool.Put(buf)
 				}
 			}
