@@ -384,7 +384,7 @@ func handleConnection(ctx context.Context, config ConnectionConfig, device Tunne
 func MaintainTunnel(ctx context.Context, config ConnectionConfig, device TunnelDevice) {
 	stats := &TunnelStats{}
 	reconnectAttempt := 0
-	packetBufferPool = NewNetBuffer(packetBuffCap)
+	packetBufferPool = NewNetBuffer(config.MTU)
 
 	for {
 		select {
