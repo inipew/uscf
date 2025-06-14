@@ -10,6 +10,7 @@ import (
 	"errors"
 	"math/big"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ type PortMapping struct {
 	RemoteIP    string // The remote destination IP address.
 	RemotePort  int    // The remote destination port number.
 }
+
+var hostnameRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$`)
 
 // GenerateRandomAndroidSerial generates a random 8-byte Android-like device identifier
 // and returns it as a hexadecimal string.
@@ -251,11 +254,13 @@ func resolveBindAddress(addr string) (string, error) {
 // Returns:
 //   - bool: True if valid, false otherwise.
 func isValidHostname(hostname string) bool {
-	// Must contain at least one dot (.) unless it's "localhost"
 	if hostname == "localhost" {
 		return true
 	}
-	return strings.Contains(hostname, ".")
+	if len(hostname) > 253 {
+		return false
+	}
+	return hostnameRegex.MatchString(hostname)
 }
 
 // LoginToBase64 encodes a username and password into a base64-encoded string in "username:password" format.
