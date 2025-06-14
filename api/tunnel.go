@@ -127,9 +127,7 @@ type NetstackAdapter struct {
 
 func (n *NetstackAdapter) ReadPacket(buf []byte) (int, error) {
 
-	//packetBuf := packetBufferPool.GetBuf(buf).([]byte)
-
-	// 修改这一行
+	// Use pooled buffers to minimize allocations
 	packetBufs := n.packetBufsPool.Get().(*[][]byte)
 	sizes := n.sizesPool.Get().(*[]int)
 
@@ -198,11 +196,12 @@ type ExponentialBackoff struct {
 	InitialDelay time.Duration
 	MaxDelay     time.Duration
 	Factor       float64
+	attempt      int
 }
 
 func (b *ExponentialBackoff) NextDelay(attempt int) time.Duration {
 	if attempt <= 0 {
-		return b.InitialDelay
+		attempt = b.attempt + 1
 	}
 
 	// 计算指数退避延迟
@@ -221,11 +220,12 @@ func (b *ExponentialBackoff) NextDelay(attempt int) time.Duration {
 	jitter := time.Duration(float64(delay) * 0.1) // 10%的抖动
 	delay = delay - jitter + time.Duration(float64(jitter*2)*rand.Float64())
 
+	b.attempt = attempt
 	return delay
 }
 
 func (b *ExponentialBackoff) Reset() {
-	// 重置状态（如果需要）
+	b.attempt = 0
 }
 
 // handleForwarding 处理数据包的转发
