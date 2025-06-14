@@ -69,6 +69,9 @@ type Config struct {
 	// 隧道配置
 	Tunnel TunnelConfig `json:"tunnel"` // MASQUE隧道相关配置
 
+	// 日志配置
+	Logging LoggingConfig `json:"logging"` // 日志相关配置
+
 	// 注册信息
 	Registration RegistrationInfo `json:"registration"` // 注册相关信息
 }
@@ -96,6 +99,14 @@ type TunnelConfig struct {
 	ReconnectDelay    Duration `json:"reconnect_delay"`     // 重连延迟
 	ConnectionTimeout Duration `json:"connection_timeout"`  // 建立连接超时
 	IdleTimeout       Duration `json:"idle_timeout"`        // 空闲连接超时
+}
+
+// LoggingConfig contains configuration related to logging output.
+type LoggingConfig struct {
+	// OutputPath specifies the file path to write logs to. If empty, logs are written to stdout.
+	OutputPath string `json:"output_path"`
+	// Level defines the minimum log level (debug, info, warn, error).
+	Level string `json:"level"`
 }
 
 // RegistrationInfo 包含注册相关的信息
@@ -135,6 +146,12 @@ func LoadConfig(configPath string) error {
 	if AppConfig.Tunnel.ConnectPort == 0 && len(AppConfig.Tunnel.DNS) == 0 {
 		AppConfig.Tunnel = GetDefaultTunnelConfig()
 	}
+	if AppConfig.Logging.OutputPath == "" {
+		AppConfig.Logging.OutputPath = GetDefaultLoggingConfig().OutputPath
+	}
+	if AppConfig.Logging.Level == "" {
+		AppConfig.Logging.Level = GetDefaultLoggingConfig().Level
+	}
 
 	ConfigLoaded = true
 
@@ -168,6 +185,11 @@ func GetDefaultTunnelConfig() TunnelConfig {
 		ConnectionTimeout: Duration(30 * time.Second),
 		IdleTimeout:       Duration(5 * time.Minute),
 	}
+}
+
+// GetDefaultLoggingConfig returns the default logging configuration.
+func GetDefaultLoggingConfig() LoggingConfig {
+	return LoggingConfig{OutputPath: "", Level: "info"}
 }
 
 // SaveConfig writes the current application configuration to a prettified JSON file.
@@ -225,6 +247,7 @@ func InitNewConfig(
 		IPv6:           ipv6,
 		Socks:          GetDefaultSocksConfig(),
 		Tunnel:         GetDefaultTunnelConfig(),
+		Logging:        GetDefaultLoggingConfig(),
 		Registration: RegistrationInfo{
 			DeviceName: deviceName,
 		},

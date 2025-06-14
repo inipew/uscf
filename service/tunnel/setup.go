@@ -1,19 +1,20 @@
 package tunnel
 
 import (
-	"context"
-	"crypto/tls"
-	"fmt"
-	"log"
-	"net"
-	"net/netip"
-	"time"
+       "context"
+       "crypto/tls"
+       "fmt"
+
+       "net"
+       "net/netip"
+       "time"
 
 	"github.com/HynoR/uscf/api"
 	"github.com/HynoR/uscf/config"
-	"github.com/HynoR/uscf/internal"
-	"golang.zx2c4.com/wireguard/tun"
-	"golang.zx2c4.com/wireguard/tun/netstack"
+       "github.com/HynoR/uscf/internal"
+       "github.com/HynoR/uscf/internal/logger"
+       "golang.zx2c4.com/wireguard/tun"
+       "golang.zx2c4.com/wireguard/tun/netstack"
 )
 
 // PrepareTLSConfig creates a TLS configuration for the MASQUE tunnel.
@@ -92,9 +93,9 @@ func TimeoutSettings(cfg *config.Config) (time.Duration, time.Duration) {
 
 // CreateTun sets up the virtual network interface for the tunnel.
 func CreateTun(local, dns []netip.Addr, cfg *config.Config) (tun.Device, *netstack.Net, error) {
-	if cfg.Tunnel.MTU != 1280 {
-		log.Println("Warning: MTU is not the default 1280. Packet loss may occur")
-	}
+       if cfg.Tunnel.MTU != 1280 {
+               logger.Logger.Warn("Warning: MTU is not the default 1280. Packet loss may occur")
+       }
 	dev, netTun, err := netstack.CreateNetTUN(local, dns, cfg.Tunnel.MTU)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create virtual TUN device: %w", err)

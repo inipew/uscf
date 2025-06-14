@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20250220050656-56698ca53ed4
 	github.com/quic-go/quic-go v0.51.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/things-go/go-socks5 v0.0.6
 	github.com/yosida95/uritemplate/v3 v3.0.2

@@ -71,6 +71,7 @@ USCF uses a JSON format configuration file. The default configuration file path 
 
 After Automatic Registration, You would get a config.json like the example below, you can edit items and then restart your program to apply them.
 The Config file is merge from usque's flags and configs, You can find the description of config items from usque.
+You can also specify a log file path in the `logging.output_path` field and the log `level`.
 
 ```json
 {
@@ -106,6 +107,10 @@ The Config file is merge from usque's flags and configs, You can find the descri
     "reconnect_delay": "1s",
     "connection_timeout": "30s",
     "idle_timeout": "5m"
+  },
+  "logging": {
+    "output_path": "",
+    "level": "info"
   },
   "registration": {
     "device_name": "Device name"
