@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 
@@ -106,6 +107,14 @@ func ConnectTunnel(ctx context.Context, tlsConfig *tls.Config, quicConfig *quic.
 	}
 	if err != nil {
 		return nil, nil, nil, nil, err
+	}
+
+	// Increase UDP buffer sizes for better throughput
+	if err := udpConn.SetReadBuffer(1 << 20); err != nil {
+		log.Printf("failed to set read buffer: %v", err)
+	}
+	if err := udpConn.SetWriteBuffer(1 << 20); err != nil {
+		log.Printf("failed to set write buffer: %v", err)
 	}
 
 	conn, err := quic.Dial(
