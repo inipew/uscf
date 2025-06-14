@@ -105,7 +105,7 @@ func ConnectTunnel(ctx context.Context, tlsConfig *tls.Config, quicConfig *quic.
 		})
 	}
 	if err != nil {
-		return udpConn, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	conn, err := quic.Dial(
@@ -116,7 +116,8 @@ func ConnectTunnel(ctx context.Context, tlsConfig *tls.Config, quicConfig *quic.
 		quicConfig,
 	)
 	if err != nil {
-		return udpConn, nil, nil, nil, err
+		udpConn.Close()
+		return nil, nil, nil, nil, err
 	}
 
 	tr := &http3.Transport{
@@ -141,9 +142,15 @@ func ConnectTunnel(ctx context.Context, tlsConfig *tls.Config, quicConfig *quic.
 	ipConn, rsp, err := connectip.Dial(ctx, hconn, template, "cf-connect-ip", additionalHeaders, true)
 	if err != nil {
 		if err.Error() == "CRYPTO_ERROR 0x131 (remote): tls: access denied" {
-			return udpConn, nil, nil, nil, errors.New("login failed! Please double-check if your tls key and cert is enrolled in the Cloudflare Access service")
+			conn.CloseWithError(0, "connect-ip dial failed")
+			tr.Close()
+			udpConn.Close()
+			return nil, nil, nil, nil, errors.New("login failed! Please double-check if your tls key and cert is enrolled in the Cloudflare Access service")
 		}
-		return udpConn, nil, nil, nil, fmt.Errorf("failed to dial connect-ip: %v", err)
+		conn.CloseWithError(0, "connect-ip dial failed")
+		tr.Close()
+		udpConn.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to dial connect-ip: %v", err)
 	}
 
 	return udpConn, tr, ipConn, rsp, nil
