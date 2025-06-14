@@ -17,7 +17,7 @@ import (
 
 // Run starts a SOCKS5 server using the provided tunnel network stack.
 func Run(cfg *config.Config, tunNet *netstack.Net, connectionTimeout, idleTimeout time.Duration) error {
-	dnsTimeoutSec := int(cfg.Socks.DNSTimeout.Seconds())
+	dnsTimeoutSec := int(cfg.Tunnel.DNSTimeout.Duration().Seconds())
 	resolver := api.NewCachingDNSResolver("", dnsTimeoutSec)
 
 	dialFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {

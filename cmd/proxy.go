@@ -71,7 +71,7 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 		}
 
 		// 更新一些需要从内部常量获取的配置值
-		config.AppConfig.Socks.SNIAddress = internal.ConnectSNI
+		config.AppConfig.Tunnel.SNIAddress = internal.ConnectSNI
 
 		// 保存更新后的配置
 		if err := config.AppConfig.SaveConfig(configPath); err != nil {
@@ -82,13 +82,14 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 		log.Println("Resetting SOCKS5 configuration to default values...")
 
 		// 保存当前的SNI地址，因为它取决于内部常量
-		sniAddress := config.AppConfig.Socks.SNIAddress
+		sniAddress := config.AppConfig.Tunnel.SNIAddress
 
 		// 重置为默认配置
 		config.AppConfig.Socks = config.GetDefaultSocksConfig()
+		config.AppConfig.Tunnel = config.GetDefaultTunnelConfig()
 
 		// 恢复SNI地址
-		config.AppConfig.Socks.SNIAddress = sniAddress
+		config.AppConfig.Tunnel.SNIAddress = sniAddress
 
 		// 保存更新后的配置
 		if err := config.AppConfig.SaveConfig(configPath); err != nil {

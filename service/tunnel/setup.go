@@ -33,7 +33,7 @@ func PrepareTLSConfig(cfg *config.Config) (*tls.Config, error) {
 		return nil, fmt.Errorf("failed to generate cert: %w", err)
 	}
 
-	tlsConfig, err := api.PrepareTlsConfig(privKey, peerPubKey, cert, cfg.Socks.SNIAddress)
+	tlsConfig, err := api.PrepareTlsConfig(privKey, peerPubKey, cert, cfg.Tunnel.SNIAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare TLS config: %w", err)
 	}
@@ -43,21 +43,21 @@ func PrepareTLSConfig(cfg *config.Config) (*tls.Config, error) {
 // PrepareNetworkConfig returns tunnel endpoint and address configuration.
 func PrepareNetworkConfig(cfg *config.Config) (*net.UDPAddr, []netip.Addr, []netip.Addr, error) {
 	var endpoint *net.UDPAddr
-	if cfg.Socks.UseIPv6 {
-		endpoint = &net.UDPAddr{IP: net.ParseIP(cfg.EndpointV6), Port: cfg.Socks.ConnectPort}
+	if cfg.Tunnel.UseIPv6 {
+		endpoint = &net.UDPAddr{IP: net.ParseIP(cfg.EndpointV6), Port: cfg.Tunnel.ConnectPort}
 	} else {
-		endpoint = &net.UDPAddr{IP: net.ParseIP(cfg.EndpointV4), Port: cfg.Socks.ConnectPort}
+		endpoint = &net.UDPAddr{IP: net.ParseIP(cfg.EndpointV4), Port: cfg.Tunnel.ConnectPort}
 	}
 
 	var locals []netip.Addr
-	if !cfg.Socks.NoTunnelIPv4 {
+	if !cfg.Tunnel.NoTunnelIPv4 {
 		v4, err := netip.ParseAddr(cfg.IPv4)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to parse IPv4 address: %w", err)
 		}
 		locals = append(locals, v4)
 	}
-	if !cfg.Socks.NoTunnelIPv6 {
+	if !cfg.Tunnel.NoTunnelIPv6 {
 		v6, err := netip.ParseAddr(cfg.IPv6)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to parse IPv6 address: %w", err)
@@ -66,7 +66,7 @@ func PrepareNetworkConfig(cfg *config.Config) (*net.UDPAddr, []netip.Addr, []net
 	}
 
 	var dnsAddrs []netip.Addr
-	for _, dns := range cfg.Socks.DNS {
+	for _, dns := range cfg.Tunnel.DNS {
 		addr, err := netip.ParseAddr(dns)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to parse DNS server: %w", err)
@@ -79,8 +79,8 @@ func PrepareNetworkConfig(cfg *config.Config) (*net.UDPAddr, []netip.Addr, []net
 
 // TimeoutSettings returns the connection and idle timeout values.
 func TimeoutSettings(cfg *config.Config) (time.Duration, time.Duration) {
-	conn := cfg.Socks.ConnectionTimeout
-	idle := cfg.Socks.IdleTimeout
+	conn := cfg.Tunnel.ConnectionTimeout.Duration()
+	idle := cfg.Tunnel.IdleTimeout.Duration()
 	if conn == 0 {
 		conn = 30 * time.Second
 	}
@@ -92,10 +92,10 @@ func TimeoutSettings(cfg *config.Config) (time.Duration, time.Duration) {
 
 // CreateTun sets up the virtual network interface for the tunnel.
 func CreateTun(local, dns []netip.Addr, cfg *config.Config) (tun.Device, *netstack.Net, error) {
-	if cfg.Socks.MTU != 1280 {
+	if cfg.Tunnel.MTU != 1280 {
 		log.Println("Warning: MTU is not the default 1280. Packet loss may occur")
 	}
-	dev, netTun, err := netstack.CreateNetTUN(local, dns, cfg.Socks.MTU)
+	dev, netTun, err := netstack.CreateNetTUN(local, dns, cfg.Tunnel.MTU)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create virtual TUN device: %w", err)
 	}
@@ -106,14 +106,14 @@ func CreateTun(local, dns []netip.Addr, cfg *config.Config) (tun.Device, *netsta
 func StartTunnel(ctx context.Context, m Manager, tlsCfg *tls.Config, endpoint *net.UDPAddr, cfg *config.Config, dev tun.Device) {
 	conf := api.ConnectionConfig{
 		TLSConfig:         tlsCfg,
-		KeepAlivePeriod:   cfg.Socks.KeepalivePeriod,
-		InitialPacketSize: cfg.Socks.InitialPacketSize,
+		KeepAlivePeriod:   cfg.Tunnel.KeepalivePeriod.Duration(),
+		InitialPacketSize: cfg.Tunnel.InitialPacketSize,
 		Endpoint:          endpoint,
-		MTU:               cfg.Socks.MTU,
+		MTU:               cfg.Tunnel.MTU,
 		MaxPacketRate:     8192,
 		MaxBurst:          1024,
 		ReconnectStrategy: &api.ExponentialBackoff{
-			InitialDelay: cfg.Socks.ReconnectDelay,
+			InitialDelay: cfg.Tunnel.ReconnectDelay.Duration(),
 			MaxDelay:     5 * time.Minute,
 			Factor:       2.0,
 		},

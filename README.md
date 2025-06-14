@@ -87,23 +87,25 @@ The Config file is merge from usque's flags and configs, You can find the descri
     "bind_address": "0.0.0.0",
     "port": "2333",
     "username": "",
-    "password": "",
+    "password": ""
+  },
+  "tunnel": {
     "connect_port": 443,
     "dns": [
       "1.1.1.1",
       "8.8.8.8"
     ],
-    "dns_timeout": 2000000000,
+    "dns_timeout": "2s",
     "use_ipv6": false,
     "no_tunnel_ipv4": false,
     "no_tunnel_ipv6": false,
     "sni_address": "",
-    "keepalive_period": 30000000000,
+    "keepalive_period": "30s",
     "mtu": 1280,
     "initial_packet_size": 1242,
-    "reconnect_delay": 1000000000,
-    "connection_timeout": 30000000000,
-    "idle_timeout": 300000000000
+    "reconnect_delay": "1s",
+    "connection_timeout": "30s",
+    "idle_timeout": "5m"
   },
   "registration": {
     "device_name": "Device name"

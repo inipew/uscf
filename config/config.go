@@ -11,6 +11,45 @@ import (
 	"time"
 )
 
+// Duration wraps time.Duration to allow human-readable JSON values.
+type Duration time.Duration
+
+// UnmarshalJSON parses either a string duration like "30s" or a number of nanoseconds.
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		*d = 0
+		return nil
+	}
+	if b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		dur, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		*d = Duration(dur)
+		return nil
+	}
+	var n int64
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*d = Duration(time.Duration(n))
+	return nil
+}
+
+// MarshalJSON writes the duration as a human-readable string.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+// Duration converts the custom type back to time.Duration.
+func (d Duration) Duration() time.Duration {
+	return time.Duration(d)
+}
+
 // Config represents the application configuration structure, containing essential details such as keys, endpoints, and access tokens.
 type Config struct {
 	// 连接信息
@@ -27,29 +66,36 @@ type Config struct {
 	// SOCKS代理配置
 	Socks SocksConfig `json:"socks"` // SOCKS5代理相关配置
 
+	// 隧道配置
+	Tunnel TunnelConfig `json:"tunnel"` // MASQUE隧道相关配置
+
 	// 注册信息
 	Registration RegistrationInfo `json:"registration"` // 注册相关信息
 }
 
-// SocksConfig 包含SOCKS5代理相关的配置
+// SocksConfig 包含SOCKS5代理相关的配置，仅涉及代理服务器本身
 type SocksConfig struct {
-	BindAddress       string        `json:"bind_address"`        // 代理绑定的地址
-	Port              string        `json:"port"`                // 代理监听的端口
-	Username          string        `json:"username"`            // 代理认证的用户名
-	Password          string        `json:"password"`            // 代理认证的密码
-	ConnectPort       int           `json:"connect_port"`        // MASQUE连接使用的端口
-	DNS               []string      `json:"dns"`                 // 在MASQUE隧道内使用的DNS服务器
-	DNSTimeout        time.Duration `json:"dns_timeout"`         // DNS查询超时时间（超时后尝试下一个服务器）
-	UseIPv6           bool          `json:"use_ipv6"`            // 是否使用IPv6进行MASQUE连接
-	NoTunnelIPv4      bool          `json:"no_tunnel_ipv4"`      // 是否在MASQUE隧道内禁用IPv4
-	NoTunnelIPv6      bool          `json:"no_tunnel_ipv6"`      // 是否在MASQUE隧道内禁用IPv6
-	SNIAddress        string        `json:"sni_address"`         // MASQUE连接使用的SNI地址
-	KeepalivePeriod   time.Duration `json:"keepalive_period"`    // MASQUE连接的心跳周期
-	MTU               int           `json:"mtu"`                 // MASQUE连接的MTU
-	InitialPacketSize uint16        `json:"initial_packet_size"` // MASQUE连接的初始包大小
-	ReconnectDelay    time.Duration `json:"reconnect_delay"`     // 重连尝试之间的延迟
-	ConnectionTimeout time.Duration `json:"connection_timeout"`  // 建立连接的超时时间
-	IdleTimeout       time.Duration `json:"idle_timeout"`        // 空闲连接的超时时间
+	BindAddress string `json:"bind_address"` // 代理绑定的地址
+	Port        string `json:"port"`         // 代理监听的端口
+	Username    string `json:"username"`     // 代理认证的用户名
+	Password    string `json:"password"`     // 代理认证的密码
+}
+
+// TunnelConfig 包含MASQUE隧道相关配置
+type TunnelConfig struct {
+	ConnectPort       int      `json:"connect_port"`        // MASQUE连接使用的端口
+	DNS               []string `json:"dns"`                 // 在隧道内使用的DNS服务器
+	DNSTimeout        Duration `json:"dns_timeout"`         // DNS查询超时时间
+	UseIPv6           bool     `json:"use_ipv6"`            // 是否使用IPv6进行MASQUE连接
+	NoTunnelIPv4      bool     `json:"no_tunnel_ipv4"`      // 是否在隧道内禁用IPv4
+	NoTunnelIPv6      bool     `json:"no_tunnel_ipv6"`      // 是否在隧道内禁用IPv6
+	SNIAddress        string   `json:"sni_address"`         // MASQUE连接使用的SNI地址
+	KeepalivePeriod   Duration `json:"keepalive_period"`    // 连接心跳周期
+	MTU               int      `json:"mtu"`                 // 隧道MTU
+	InitialPacketSize uint16   `json:"initial_packet_size"` // 初始包大小
+	ReconnectDelay    Duration `json:"reconnect_delay"`     // 重连延迟
+	ConnectionTimeout Duration `json:"connection_timeout"`  // 建立连接超时
+	IdleTimeout       Duration `json:"idle_timeout"`        // 空闲连接超时
 }
 
 // RegistrationInfo 包含注册相关的信息
@@ -82,10 +128,12 @@ func LoadConfig(configPath string) error {
 		return fmt.Errorf("failed to decode config file: %v", err)
 	}
 
-	// 如果Socks配置为空，设置默认值
-	// 判断Socks配置是否已初始化（通过检查关键字段）
-	if AppConfig.Socks.Port == "" && AppConfig.Socks.BindAddress == "" && len(AppConfig.Socks.DNS) == 0 {
+	// 如果配置项为空，设置为默认值
+	if AppConfig.Socks.Port == "" && AppConfig.Socks.BindAddress == "" {
 		AppConfig.Socks = GetDefaultSocksConfig()
+	}
+	if AppConfig.Tunnel.ConnectPort == 0 && len(AppConfig.Tunnel.DNS) == 0 {
+		AppConfig.Tunnel = GetDefaultTunnelConfig()
 	}
 
 	ConfigLoaded = true
@@ -96,23 +144,29 @@ func LoadConfig(configPath string) error {
 // GetDefaultSocksConfig 返回默认的SOCKS代理配置
 func GetDefaultSocksConfig() SocksConfig {
 	return SocksConfig{
-		BindAddress:       "127.0.0.1",
-		Port:              "1080",
-		Username:          "",
-		Password:          "",
+		BindAddress: "127.0.0.1",
+		Port:        "1080",
+		Username:    "",
+		Password:    "",
+	}
+}
+
+// GetDefaultTunnelConfig 返回默认的MASQUE隧道配置
+func GetDefaultTunnelConfig() TunnelConfig {
+	return TunnelConfig{
 		ConnectPort:       443,
 		DNS:               []string{"1.1.1.1", "8.8.8.8"},
-		DNSTimeout:        2 * time.Second,
+		DNSTimeout:        Duration(2 * time.Second),
 		UseIPv6:           false,
 		NoTunnelIPv4:      false,
 		NoTunnelIPv6:      false,
-		SNIAddress:        "", // 这应当从internal.ConnectSNI读取，但现在我们不修改其他文件
-		KeepalivePeriod:   30 * time.Second,
+		SNIAddress:        "",
+		KeepalivePeriod:   Duration(30 * time.Second),
 		MTU:               1280,
 		InitialPacketSize: 1242,
-		ReconnectDelay:    1 * time.Second,
-		ConnectionTimeout: 30 * time.Second,
-		IdleTimeout:       5 * time.Minute,
+		ReconnectDelay:    Duration(1 * time.Second),
+		ConnectionTimeout: Duration(30 * time.Second),
+		IdleTimeout:       Duration(5 * time.Minute),
 	}
 }
 
@@ -170,6 +224,7 @@ func InitNewConfig(
 		IPv4:           ipv4,
 		IPv6:           ipv6,
 		Socks:          GetDefaultSocksConfig(),
+		Tunnel:         GetDefaultTunnelConfig(),
 		Registration: RegistrationInfo{
 			DeviceName: deviceName,
 		},
