@@ -1,19 +1,19 @@
 package api
 
 import (
-	"context"
-	"crypto/tls"
-	"fmt"
-	"log"
-	"math/rand"
-	"net"
-	"sync"
-	"sync/atomic"
-	"time"
+       "context"
+       "crypto/tls"
+       "fmt"
+       "math/rand"
+       "net"
+       "sync"
+       "sync/atomic"
+       "time"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
-	"github.com/HynoR/uscf/internal"
-	"golang.zx2c4.com/wireguard/tun"
+       connectip "github.com/Diniboy1123/connect-ip-go"
+       "github.com/HynoR/uscf/internal"
+       "github.com/HynoR/uscf/internal/logger"
+       "golang.zx2c4.com/wireguard/tun"
 )
 
 const packetBuffCap = 2048
@@ -322,16 +322,16 @@ func monitorStats(ctx context.Context, stats *TunnelStats) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			log.Printf("Tunnel stats: In: %d pkts (%d bytes), Out: %d pkts (%d bytes), Errors: %d, HandShake: %d",
-				stats.PacketsIn, stats.BytesIn, stats.PacketsOut, stats.BytesOut, stats.Errors, stats.HandShake)
+                       logger.Logger.Infof("Tunnel stats: In: %d pkts (%d bytes), Out: %d pkts (%d bytes), Errors: %d, HandShake: %d",
+                               stats.PacketsIn, stats.BytesIn, stats.PacketsOut, stats.BytesOut, stats.Errors, stats.HandShake)
 		}
 	}
 }
 
 // handleConnection 处理单次连接
 func handleConnection(ctx context.Context, config ConnectionConfig, device TunnelDevice, stats *TunnelStats, reconnectAttempt int) (int, error) {
-	log.Printf("Establishing MASQUE connection to %s:%d (attempt #%d)",
-		config.Endpoint.IP, config.Endpoint.Port, reconnectAttempt+1)
+       logger.Logger.Infof("Establishing MASQUE connection to %s:%d (attempt #%d)",
+               config.Endpoint.IP, config.Endpoint.Port, reconnectAttempt+1)
 
 	udpConn, tr, ipConn, rsp, err := ConnectTunnel(
 		ctx,
@@ -362,7 +362,7 @@ func handleConnection(ctx context.Context, config ConnectionConfig, device Tunne
 	}
 
 	stats.RecordHandShake()
-	log.Println("Connected to MASQUE server")
+       logger.Logger.Info("Connected to MASQUE server")
 
 	// 创建子上下文用于转发
 	forwardingCtx, cancel := context.WithCancel(ctx)
@@ -374,7 +374,7 @@ func handleConnection(ctx context.Context, config ConnectionConfig, device Tunne
 	// 处理转发
 
 	if err = handleForwarding(forwardingCtx, device, ipConn, stats); err != nil {
-		log.Printf("Forwarding error: %v", err)
+               logger.Logger.Errorf("Forwarding error: %v", err)
 		stats.RecordError()
 	}
 
@@ -389,7 +389,7 @@ func MaintainTunnel(ctx context.Context, config ConnectionConfig, device TunnelD
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Context canceled, stopping tunnel maintenance")
+                        logger.Logger.Info("Context canceled, stopping tunnel maintenance")
 			return
 		default:
 		}
@@ -401,7 +401,7 @@ func MaintainTunnel(ctx context.Context, config ConnectionConfig, device TunnelD
 
 		if err != nil {
 			delay := config.ReconnectStrategy.NextDelay(reconnectAttempt)
-			log.Printf("Connection error: %v. Will retry in %v", err, delay)
+                       logger.Logger.Warnf("Connection error: %v. Will retry in %v", err, delay)
 
 			select {
 			case <-time.After(delay):

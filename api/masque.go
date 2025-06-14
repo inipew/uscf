@@ -1,20 +1,20 @@
 package api
 
 import (
-	"context"
-	"crypto/ecdsa"
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
-	"fmt"
-	"log"
-	"net"
-	"net/http"
+        "context"
+        "crypto/ecdsa"
+        "crypto/tls"
+        "crypto/x509"
+        "errors"
+        "fmt"
+        "net"
+        "net/http"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
-	"github.com/yosida95/uritemplate/v3"
+        connectip "github.com/Diniboy1123/connect-ip-go"
+        "github.com/quic-go/quic-go"
+        "github.com/quic-go/quic-go/http3"
+       "github.com/HynoR/uscf/internal/logger"
+        "github.com/yosida95/uritemplate/v3"
 )
 
 // PrepareTlsConfig creates a TLS configuration using the provided certificate and SNI (Server Name Indication).
@@ -110,12 +110,12 @@ func ConnectTunnel(ctx context.Context, tlsConfig *tls.Config, quicConfig *quic.
 	}
 
 	// Increase UDP buffer sizes for better throughput
-	if err := udpConn.SetReadBuffer(1 << 20); err != nil {
-		log.Printf("failed to set read buffer: %v", err)
-	}
-	if err := udpConn.SetWriteBuffer(1 << 20); err != nil {
-		log.Printf("failed to set write buffer: %v", err)
-	}
+       if err := udpConn.SetReadBuffer(1 << 20); err != nil {
+               logger.Logger.Warnf("failed to set read buffer: %v", err)
+       }
+       if err := udpConn.SetWriteBuffer(1 << 20); err != nil {
+               logger.Logger.Warnf("failed to set write buffer: %v", err)
+       }
 
 	conn, err := quic.Dial(
 		ctx,
