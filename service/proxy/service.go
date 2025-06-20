@@ -31,6 +31,11 @@ func (s *Service) Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	connTimeout, idleTimeout := tunnel.TimeoutSettings(cfg)
+
+	if cfg.Tunnel.PerClient {
+		return socks.Run(ctx, cfg, nil, connTimeout, idleTimeout)
+	}
+
 	dev, netTun, err := tunnel.CreateTun(locals, dnsAddrs, cfg)
 	if err != nil {
 		return err
