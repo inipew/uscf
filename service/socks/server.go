@@ -1,22 +1,22 @@
 package socks
 
 import (
-       "context"
-       "fmt"
-       "log"
-       "net"
-       "time"
+	"context"
+	"fmt"
+	"log"
+	"net"
+	"time"
 
-       "github.com/HynoR/uscf/api"
-       "github.com/HynoR/uscf/config"
-       "github.com/HynoR/uscf/models"
-       "github.com/HynoR/uscf/internal/logger"
-       "github.com/things-go/go-socks5"
-       "golang.zx2c4.com/wireguard/tun/netstack"
+	"github.com/HynoR/uscf/api"
+	"github.com/HynoR/uscf/config"
+	"github.com/HynoR/uscf/internal/logger"
+	"github.com/HynoR/uscf/models"
+	"github.com/things-go/go-socks5"
+	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
 // Run starts a SOCKS5 server using the provided tunnel network stack.
-func Run(cfg *config.Config, tunNet *netstack.Net, connectionTimeout, idleTimeout time.Duration) error {
+func Run(ctx context.Context, cfg *config.Config, tunNet *netstack.Net, connectionTimeout, idleTimeout time.Duration) error {
 	dnsTimeoutSec := int(cfg.Tunnel.DNSTimeout.Duration().Seconds())
 	resolver := api.NewCachingDNSResolver("", dnsTimeoutSec)
 
@@ -33,17 +33,25 @@ func Run(cfg *config.Config, tunNet *netstack.Net, connectionTimeout, idleTimeou
 
 	server := createServer(cfg.Socks.Username, cfg.Socks.Password, dialFunc, resolver)
 	bindAddr := net.JoinHostPort(cfg.Socks.BindAddress, cfg.Socks.Port)
-       logger.Logger.Infof("SOCKS proxy listening on %s", bindAddr)
+	logger.Logger.Infof("SOCKS proxy listening on %s", bindAddr)
 
 	l, err := net.Listen("tcp", bindAddr)
 	if err != nil {
 		return fmt.Errorf("failed to start SOCKS proxy: %w", err)
 	}
 
+	go func() {
+		<-ctx.Done()
+		l.Close()
+	}()
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-                       logger.Logger.Warnf("Failed to accept connection: %v", err)
+			if ctx.Err() != nil {
+				return nil
+			}
+			logger.Logger.Warnf("Failed to accept connection: %v", err)
 			continue
 		}
 		timeoutConn := &models.TimeoutConn{Conn: conn, IdleTimeout: idleTimeout}
@@ -54,16 +62,16 @@ func Run(cfg *config.Config, tunNet *netstack.Net, connectionTimeout, idleTimeou
 func createServer(username, password string, dial func(ctx context.Context, network, addr string) (net.Conn, error), resolver socks5.NameResolver) *socks5.Server {
 	buf := api.NewNetBuffer(32 * 1024)
 	if buf == nil {
-               logger.Logger.Error("Failed to create buffer")
+		logger.Logger.Error("Failed to create buffer")
 		return nil
 	}
 
-       opts := []socks5.Option{
-               socks5.WithLogger(socks5.NewLogger(log.New(logger.Logger.Writer(), "socks5: ", log.LstdFlags))),
-               socks5.WithDial(dial),
-               socks5.WithResolver(resolver),
-               socks5.WithBufferPool(buf),
-       }
+	opts := []socks5.Option{
+		socks5.WithLogger(socks5.NewLogger(log.New(logger.Logger.Writer(), "socks5: ", log.LstdFlags))),
+		socks5.WithDial(dial),
+		socks5.WithResolver(resolver),
+		socks5.WithBufferPool(buf),
+	}
 	if username != "" && password != "" {
 		opts = append(opts, socks5.WithAuthMethods([]socks5.Authenticator{
 			socks5.UserPassAuthenticator{Credentials: socks5.StaticCredentials{username: password}},

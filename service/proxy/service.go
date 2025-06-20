@@ -38,5 +38,5 @@ func (s *Service) Run(ctx context.Context, cfg *config.Config) error {
 	defer dev.Close()
 
 	tunnel.StartTunnel(ctx, s.Tunnel, tlsCfg, endpoint, cfg, dev)
-	return socks.Run(cfg, netTun, connTimeout, idleTimeout)
+	return socks.Run(ctx, cfg, netTun, connTimeout, idleTimeout)
 }
