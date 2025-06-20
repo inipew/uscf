@@ -1,17 +1,16 @@
 package cmd
 
 import (
-       "context"
-       "encoding/base64"
-       "fmt"
+	"encoding/base64"
+	"fmt"
 
-       "github.com/HynoR/uscf/api"
-       "github.com/HynoR/uscf/config"
-       "github.com/HynoR/uscf/internal"
-       "github.com/HynoR/uscf/internal/logger"
-       proxysvc "github.com/HynoR/uscf/service/proxy"
-       "github.com/HynoR/uscf/service/tunnel"
-       "github.com/spf13/cobra"
+	"github.com/HynoR/uscf/api"
+	"github.com/HynoR/uscf/config"
+	"github.com/HynoR/uscf/internal"
+	"github.com/HynoR/uscf/internal/logger"
+	proxysvc "github.com/HynoR/uscf/service/proxy"
+	"github.com/HynoR/uscf/service/tunnel"
+	"github.com/spf13/cobra"
 )
 
 // proxyCmd 命令，结合 socks 和 register 的功能
@@ -74,12 +73,12 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 		config.AppConfig.Tunnel.SNIAddress = internal.ConnectSNI
 
 		// 保存更新后的配置
-               if err := config.AppConfig.SaveConfig(configPath); err != nil {
-                       logger.Logger.Warnf("Failed to save updated config: %v", err)
-               }
+		if err := config.AppConfig.SaveConfig(configPath); err != nil {
+			logger.Logger.Warnf("Failed to save updated config: %v", err)
+		}
 	} else if resetConfig {
 		// 如果已加载配置且指定了reset-config标志，则重置SOCKS5配置
-               logger.Logger.Info("Resetting SOCKS5 configuration to default values...")
+		logger.Logger.Info("Resetting SOCKS5 configuration to default values...")
 
 		// 保存当前的SNI地址，因为它取决于内部常量
 		sniAddress := config.AppConfig.Tunnel.SNIAddress
@@ -93,11 +92,11 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 
 		// 保存更新后的配置
 		if err := config.AppConfig.SaveConfig(configPath); err != nil {
-                       logger.Logger.Warnf("Failed to save reset config: %v", err)
+			logger.Logger.Warnf("Failed to save reset config: %v", err)
 			cmd.Printf("Failed to save reset configuration: %v\n", err)
 			return
 		}
-               logger.Logger.Infof("SOCKS5 configuration has been reset to default values in %s", configPath)
+		logger.Logger.Infof("SOCKS5 configuration has been reset to default values in %s", configPath)
 	}
 
 	// 检查并应用命令行参数覆盖配置文件的值
@@ -105,43 +104,43 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 
 	// 检查绑定地址
 	if bindAddress, _ := cmd.Flags().GetString("bind-address"); bindAddress != "" {
-               logger.Logger.Infof("Overriding bind address from command line: %s", bindAddress)
+		logger.Logger.Infof("Overriding bind address from command line: %s", bindAddress)
 		config.AppConfig.Socks.BindAddress = bindAddress
 		configChanged = true
 	}
 
 	// 检查端口
 	if port, _ := cmd.Flags().GetString("port"); port != "" {
-               logger.Logger.Infof("Overriding port from command line: %s", port)
+		logger.Logger.Infof("Overriding port from command line: %s", port)
 		config.AppConfig.Socks.Port = port
 		configChanged = true
 	}
 
 	// 检查用户名
 	if username, _ := cmd.Flags().GetString("username"); username != "" {
-               logger.Logger.Infof("Overriding username from command line")
+		logger.Logger.Infof("Overriding username from command line")
 		config.AppConfig.Socks.Username = username
 		configChanged = true
 	}
 
 	// 检查密码
 	if password, _ := cmd.Flags().GetString("password"); password != "" {
-               logger.Logger.Infof("Overriding password from command line")
+		logger.Logger.Infof("Overriding password from command line")
 		config.AppConfig.Socks.Password = password
 		configChanged = true
 	}
 
 	// 如果配置有变更，保存到配置文件
 	if configChanged {
-               logger.Logger.Infof("Saving updated configuration to %s", configPath)
+		logger.Logger.Infof("Saving updated configuration to %s", configPath)
 		if err := config.AppConfig.SaveConfig(configPath); err != nil {
-                       logger.Logger.Warnf("Failed to save updated config: %v", err)
+			logger.Logger.Warnf("Failed to save updated config: %v", err)
 		}
 	}
 
 	// 2. 启动 SOCKS5 代理
 	svc := proxysvc.New(tunnel.DefaultManager{})
-	if err := svc.Run(context.Background(), &config.AppConfig); err != nil {
+	if err := svc.Run(cmd.Context(), &config.AppConfig); err != nil {
 		cmd.Printf("%v\n", err)
 		return
 	}
@@ -149,7 +148,7 @@ func runProxyCmd(cmd *cobra.Command, args []string) {
 
 // handleRegistration 处理自动注册流程
 func handleRegistration(cmd *cobra.Command, configPath string) error {
-       logger.Logger.Info("Config not loaded. Starting automatic registration...")
+	logger.Logger.Info("Config not loaded. Starting automatic registration...")
 
 	// 获取注册参数
 	deviceName, _ := cmd.Flags().GetString("name")
@@ -158,7 +157,7 @@ func handleRegistration(cmd *cobra.Command, configPath string) error {
 	acceptTos, _ := cmd.Flags().GetBool("accept-tos")
 	jwt, _ := cmd.Flags().GetString("jwt")
 
-       logger.Logger.Infof("Registering with locale %s and model %s", locale, model)
+	logger.Logger.Infof("Registering with locale %s and model %s", locale, model)
 
 	// 注册账户
 	accountData, err := api.Register(model, locale, jwt, acceptTos)
@@ -172,7 +171,7 @@ func handleRegistration(cmd *cobra.Command, configPath string) error {
 		return fmt.Errorf("Failed to generate key pair: %v", err)
 	}
 
-       logger.Logger.Info("Enrolling device key...")
+	logger.Logger.Info("Enrolling device key...")
 
 	// 注册设备密钥
 	updatedAccountData, apiErr, err := api.EnrollKey(accountData, pubKey, deviceName)
@@ -183,7 +182,7 @@ func handleRegistration(cmd *cobra.Command, configPath string) error {
 		return fmt.Errorf("Failed to enroll key: %v", err)
 	}
 
-       logger.Logger.Info("Registration successful. Saving config...")
+	logger.Logger.Info("Registration successful. Saving config...")
 
 	// 保存配置，使用InitNewConfig创建带有默认值的配置
 	config.AppConfig = config.InitNewConfig(
@@ -207,7 +206,7 @@ func handleRegistration(cmd *cobra.Command, configPath string) error {
 		return fmt.Errorf("Failed to save config: %v", err)
 	}
 
-       logger.Logger.Infof("Config saved to %s", configPath)
+	logger.Logger.Infof("Config saved to %s", configPath)
 
 	// 标记配置已加载
 	config.ConfigLoaded = true
