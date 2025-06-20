@@ -99,6 +99,7 @@ type TunnelConfig struct {
 	ReconnectDelay    Duration `json:"reconnect_delay"`     // 重连延迟
 	ConnectionTimeout Duration `json:"connection_timeout"`  // 建立连接超时
 	IdleTimeout       Duration `json:"idle_timeout"`        // 空闲连接超时
+	PerClient         bool     `json:"per_client"`          // 是否为每个SOCKS客户端创建独立隧道
 }
 
 // LoggingConfig contains configuration related to logging output.
@@ -184,6 +185,7 @@ func GetDefaultTunnelConfig() TunnelConfig {
 		ReconnectDelay:    Duration(1 * time.Second),
 		ConnectionTimeout: Duration(30 * time.Second),
 		IdleTimeout:       Duration(5 * time.Minute),
+		PerClient:         false,
 	}
 }
 

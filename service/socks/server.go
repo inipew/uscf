@@ -11,7 +11,9 @@ import (
 	"github.com/HynoR/uscf/config"
 	"github.com/HynoR/uscf/internal/logger"
 	"github.com/HynoR/uscf/models"
+	"github.com/HynoR/uscf/service/tunnel"
 	"github.com/things-go/go-socks5"
+	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
@@ -20,18 +22,33 @@ func Run(ctx context.Context, cfg *config.Config, tunNet *netstack.Net, connecti
 	dnsTimeoutSec := int(cfg.Tunnel.DNSTimeout.Duration().Seconds())
 	resolver := api.NewCachingDNSResolver("", dnsTimeoutSec)
 
-	dialFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		dctx, cancel := context.WithTimeout(ctx, connectionTimeout)
-		defer cancel()
-
-		conn, err := tunNet.DialContext(dctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-		return &models.TimeoutConn{Conn: conn, IdleTimeout: idleTimeout}, nil
+	tlsCfg, err := tunnel.PrepareTLSConfig(cfg)
+	if err != nil {
+		return err
 	}
 
-	server := createServer(cfg.Socks.Username, cfg.Socks.Password, dialFunc, resolver)
+	endpoint, locals, dnsAddrs, err := tunnel.PrepareNetworkConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	dialFunc := func(netTun *netstack.Net) func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dctx, cancel := context.WithTimeout(ctx, connectionTimeout)
+			defer cancel()
+
+			conn, err := netTun.DialContext(dctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			return &models.TimeoutConn{Conn: conn, IdleTimeout: idleTimeout}, nil
+		}
+	}
+
+	var server *socks5.Server
+	if !cfg.Tunnel.PerClient {
+		server = createServer(cfg.Socks.Username, cfg.Socks.Password, dialFunc(tunNet), resolver)
+	}
 	bindAddr := net.JoinHostPort(cfg.Socks.BindAddress, cfg.Socks.Port)
 	logger.Logger.Infof("SOCKS proxy listening on %s", bindAddr)
 
@@ -54,6 +71,28 @@ func Run(ctx context.Context, cfg *config.Config, tunNet *netstack.Net, connecti
 			logger.Logger.Warnf("Failed to accept connection: %v", err)
 			continue
 		}
+
+		if cfg.Tunnel.PerClient {
+			dev, netTun, err := tunnel.CreateTun(locals, dnsAddrs, cfg)
+			if err != nil {
+				logger.Logger.Warnf("Failed to create tun device: %v", err)
+				conn.Close()
+				continue
+			}
+
+			cctx, cancel := context.WithCancel(ctx)
+			tunnel.StartTunnel(cctx, tunnel.DefaultManager{}, tlsCfg, endpoint, cfg, dev)
+			svr := createServer(cfg.Socks.Username, cfg.Socks.Password, dialFunc(netTun), resolver)
+
+			go func(c net.Conn, cancel context.CancelFunc, dev tun.Device) {
+				timeoutConn := &models.TimeoutConn{Conn: c, IdleTimeout: idleTimeout}
+				svr.ServeConn(timeoutConn)
+				cancel()
+				dev.Close()
+			}(conn, cancel, dev)
+			continue
+		}
+
 		timeoutConn := &models.TimeoutConn{Conn: conn, IdleTimeout: idleTimeout}
 		go server.ServeConn(timeoutConn)
 	}

@@ -106,7 +106,8 @@ You can also specify a log file path in the `logging.output_path` field and the 
     "initial_packet_size": 1242,
     "reconnect_delay": "1s",
     "connection_timeout": "30s",
-    "idle_timeout": "5m"
+    "idle_timeout": "5m",
+    "per_client": false
   },
   "logging": {
     "output_path": "",
